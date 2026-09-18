@@ -1,0 +1,56 @@
+version: 2
+
+models:
+  # Historical trips yang lolos business rules
+  - name: int_citibike_trips_clean
+    description: "Validated historical Citi Bike trips."
+    columns:
+      - name: ride_id
+        tests:
+          - not_null
+          - unique
+
+      - name: trip_date
+        tests:
+          - not_null
+
+
+  # Historical trips yang gagal business validation
+  - name: int_citibike_trips_invalid
+    description: "Historical trips rejected by business validation."
+    columns:
+      - name: ride_id
+        tests:
+          - not_null
+
+      - name: invalid_reason
+        tests:
+          - not_null
+
+
+  # Clean GBFS station reference
+  - name: int_station_information_clean
+    description: "Validated GBFS station information."
+    columns:
+      - name: station_id
+        tests:
+          - not_null
+          - unique
+
+      - name: short_name
+        tests:
+          - not_null
+          - unique
+
+
+  # Validated realtime station status
+  - name: int_station_status
+    description: "Validated GBFS station status time series."
+    columns:
+      - name: station_id
+        tests:
+          - not_null
+
+      - name: snapshot_timestamp
+        tests:
+          - not_null

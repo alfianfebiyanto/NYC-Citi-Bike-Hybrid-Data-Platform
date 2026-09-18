@@ -1,0 +1,16 @@
+FROM python:3.12-slim
+
+# 1. Gunakan /app sebagai working directory container.
+WORKDIR /app
+
+# 2. Copy dan install dependency khusus streaming.
+COPY requirements-streaming.txt .
+
+RUN pip install --no-cache-dir -r requirements-streaming.txt
+
+# 3. Copy source code streaming dan konfigurasi project.
+COPY streaming/ ./streaming/
+COPY config/ ./config/
+
+# 4. Tambahkan project directory ke Python module path.
+ENV PYTHONPATH=/app

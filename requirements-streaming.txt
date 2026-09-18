@@ -1,0 +1,6 @@
+apache-beam[gcp]==2.76.0
+google-cloud-pubsub
+google-cloud-bigquery
+python-dotenv
+requests
+pandas

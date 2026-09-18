@@ -1,0 +1,29 @@
+# Python
+venv/
+.venv/
+__pycache__
+__init__.py
+#.env
+.env
+
+# GCP Credentials
+credentials/*
+!credentials/.gitkeep
+*.json
+
+# =========================
+# Local Data
+# =========================
+data/raw/
+*.csv
+*.parquet
+*.zip
+
+# dbt
+dbt_citibike/target/
+dbt_citibike/logs/
+dbt_citibike/dbt_packages/
+
+
+# Airflow
+logs/

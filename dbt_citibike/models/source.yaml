@@ -1,0 +1,18 @@
+version: 2
+
+sources:
+  - name: raw
+    database: jcdeah-009
+    schema: finpro_alfian_raw
+
+    tables:
+      - name: raw_citibike_trips
+        description: "Raw Citi Bike batch trip data loaded from GCS."
+
+      - name: raw_citibike_stream
+        description: "Raw Citi Bike valid streaming data loaded from Dataflow."
+      
+      - name: station_status
+        description: "Raw Citi Bike GBFS station status dari streaming Dataflow."
+
+      - name: station_information

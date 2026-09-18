@@ -1,0 +1,166 @@
+version: "3.8"
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+  image: finpro-alfian-airflow:2.9.1
+
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@finpro-alfian-airflow-db:5432/${AIRFLOW_DB_NAME}
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.session,airflow.api.auth.backend.basic_auth
+    GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/credentials/purwadhika-key.json
+
+    DBT_PROJECT_DIR: /opt/airflow/dbt_citibike
+    DBT_PROFILES_DIR: /opt/airflow/dbt_citibike
+
+    PYTHONPATH: /opt/airflow
+
+  env_file:
+    - .env
+
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+
+    - ./batch:/opt/airflow/batch
+    - ./config:/opt/airflow/config
+    - ./quality:/opt/airflow/quality
+
+    - ./dbt_citibike:/opt/airflow/dbt_citibike
+    - ./data:/opt/airflow/data
+    - ./credentials:/opt/airflow/credentials:ro
+
+  user: "${AIRFLOW_UID:-50000}:0"
+
+  depends_on:
+    finpro-alfian-airflow-db:
+      condition: service_healthy
+
+
+services:
+
+  finpro-alfian-airflow-db:
+    image: postgres:16-alpine
+    container_name: finpro-alfian-airflow-db
+
+    environment:
+      POSTGRES_USER: ${AIRFLOW_DB_USER}
+      POSTGRES_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      POSTGRES_DB: ${AIRFLOW_DB_NAME}
+
+    volumes:
+      - finpro-alfian-airflow-metadata:/var/lib/postgresql/data
+
+    ports:
+      - "5446:5432"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AIRFLOW_DB_USER} -d ${AIRFLOW_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+    restart: unless-stopped
+
+
+  finpro-alfian-airflow-init:
+    <<: *airflow-common
+    container_name: finpro-alfian-airflow-init
+
+    command:
+      - bash
+      - -c
+      - |
+        airflow db migrate &&
+        airflow users create \
+          --username "${AIRFLOW_ADMIN_USER}" \
+          --password "${AIRFLOW_ADMIN_PASSWORD}" \
+          --firstname "Airflow" \
+          --lastname "Admin" \
+          --role "Admin" \
+          --email "${AIRFLOW_ADMIN_EMAIL}" \
+        || true
+
+    restart: "no"
+
+
+  finpro-alfian-airflow-scheduler:
+    <<: *airflow-common
+    container_name: finpro-alfian-airflow-scheduler
+    command: scheduler
+    restart: unless-stopped
+
+
+  finpro-alfian-airflow-webserver:
+    <<: *airflow-common
+    container_name: finpro-alfian-airflow-webserver
+    command: webserver
+
+    ports:
+      - "8085:8080"
+
+    restart: unless-stopped
+
+  dbt-docs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    image: finpro-alfian-airflow:2.9.1
+    container_name: finpro-alfian-dbt-docs
+
+    working_dir: /opt/airflow/dbt_citibike
+
+    command: >
+      bash -c "
+      dbt docs generate &&
+      dbt docs serve --host 0.0.0.0 --port 8081
+      "
+
+    env_file:
+      - .env
+
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/credentials/purwadhika-key.json
+      DBT_PROJECT_DIR: /opt/airflow/dbt_citibike
+      DBT_PROFILES_DIR: /opt/airflow/dbt_citibike
+
+    volumes:
+      - ./dbt_citibike:/opt/airflow/dbt_citibike
+      - ./credentials:/opt/airflow/credentials:ro
+
+    ports:
+      - "8081:8081"
+
+    restart: unless-stopped 
+
+  finpro-alfian-streaming:
+    build:
+      context: .
+      dockerfile: Dockerfile.streaming
+    image: finpro-alfian-streaming:latest
+    container_name: finpro-alfian-streaming
+
+    profiles:
+      - streaming
+
+    env_file:
+      - .env
+
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /app/credentials/purwadhika-key.json
+      PYTHONPATH: /app
+
+    volumes:
+      - ./streaming:/app/streaming
+      - ./config:/app/config
+      - ./data:/app/data
+      - ./credentials:/app/credentials:ro
+
+volumes:
+  finpro-alfian-airflow-metadata:

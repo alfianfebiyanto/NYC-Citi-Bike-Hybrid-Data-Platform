@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  # Historical Citi Bike trips
+  - name: stg_citibike_trips
+    description: "Standardized historical Citi Bike trip data."
+    columns:
+      - name: ride_id
+        tests:
+          - not_null
+          - unique
+
+  # GBFS station reference data
+  - name: stg_station_information
+    description: "Standardized Citi Bike GBFS station information."
+    columns:
+      - name: station_id
+        tests:
+          - not_null
+          - unique
+
+      - name: short_name
+        tests:
+          - not_null
+          - unique
+
+
+  # GBFS realtime station status
+  - name: stg_station_status
+    description: "Standardized realtime Citi Bike GBFS station status."
+    columns:
+      - name: station_id
+        tests:
+          - not_null
+
+      - name: snapshot_timestamp
+        tests:
+          - not_null

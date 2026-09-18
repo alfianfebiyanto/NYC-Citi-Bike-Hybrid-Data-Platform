@@ -1,0 +1,78 @@
+version: 2
+
+models:
+  # ==========================================================
+  # FACT TRIPS
+  # Grain: satu baris untuk satu perjalanan Citi Bike.
+  # ==========================================================
+  - name: fact_trips
+    description: "Fact table perjalanan Citi Bike."
+
+    columns:
+      - name: ride_id
+        description: "Identifier unik perjalanan."
+        data_tests:
+          - not_null
+          - unique
+
+      - name: date_key
+        description: "Foreign key ke dim_date."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_key
+
+      - name: start_station_key
+        description: "Foreign key ke dim_station untuk station keberangkatan."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_station')
+              field: station_key
+
+      - name: end_station_key
+        description: "Foreign key ke dim_station untuk station tujuan."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_station')
+              field: station_key
+
+      - name: rider_type_key
+        description: "Foreign key ke dim_rider_type."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_rider_type')
+              field: rider_type_key
+
+      - name: bike_type_key
+        description: "Foreign key ke dim_bike_type."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_bike_type')
+              field: bike_type_key
+
+
+  # ==========================================================
+  # FACT STATION STATUS
+  # Grain: satu station untuk satu snapshot waktu.
+  # ==========================================================
+  - name: fact_station_status
+    description: "Fact table snapshot realtime ketersediaan Citi Bike station."
+
+    columns:
+      - name: station_key
+        description: "Foreign key ke dim_station."
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_station')
+              field: station_key
+
+      - name: snapshot_timestamp
+        description: "Waktu snapshot status station."
+        data_tests:
+          - not_null
