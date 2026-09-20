@@ -2,7 +2,6 @@
 -- Grain: satu row untuk satu ride_id.
 
 {{ config(
-    materialized='table',
     partition_by={
         "field": "date_key",
         "data_type": "date",

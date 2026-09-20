@@ -1,9 +1,5 @@
 -- Menyimpan Citi Bike trips yang tidak lolos business validation.
 
-{{ config(
-    materialized='view'
-) }}
-
 SELECT
     ride_id,
     rideable_type,

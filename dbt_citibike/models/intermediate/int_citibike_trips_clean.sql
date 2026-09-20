@@ -1,10 +1,6 @@
 -- Intermediate model untuk validasi business rules
 -- dan enrichment data historical Citi Bike trips.
 
-{{ config(
-    materialized='view'
-) }}
-
 SELECT
     -- Identitas perjalanan dan kategori
     ride_id,

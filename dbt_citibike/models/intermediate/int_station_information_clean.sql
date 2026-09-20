@@ -1,9 +1,5 @@
 -- Membersihkan dan memvalidasi reference station dari GBFS.
 
-{{ config(
-    materialized='view'
-) }}
-
 SELECT *
 FROM {{ ref('stg_station_information') }}
 

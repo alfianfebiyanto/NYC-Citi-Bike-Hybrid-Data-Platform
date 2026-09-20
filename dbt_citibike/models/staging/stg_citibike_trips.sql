@@ -1,10 +1,6 @@
 -- Staging data historical Citi Bike trips.
 -- Standardisasi field dan tipe data dari RAW layer.
 
-{{ config(
-    materialized='view'
-) }}
-
 SELECT
     -- Identitas perjalanan
     CAST(ride_id AS STRING) AS ride_id,

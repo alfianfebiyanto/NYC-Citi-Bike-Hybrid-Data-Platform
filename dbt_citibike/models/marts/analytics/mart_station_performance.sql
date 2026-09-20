@@ -1,8 +1,6 @@
 -- Citi Bike station performance summary.
 -- Grain: one row per station.
 
-{{ config(materialized='table') }}
-
 WITH departures AS (
     SELECT
         start_station_key AS station_key,

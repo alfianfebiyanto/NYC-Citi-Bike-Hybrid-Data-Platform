@@ -1,9 +1,6 @@
 -- Staging data realtime GBFS station_status.
 -- Melakukan standardisasi field dan tipe data dari RAW layer.
 
-{{ config(
-    materialized='view'
-) }}
 
 SELECT
     -- Identitas station

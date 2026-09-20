@@ -2,7 +2,6 @@
 -- Grain: one date x rider type x bike type.
 
 {{ config(
-    materialized='table',
     partition_by={
         "field": "ride_date",
         "data_type": "date",

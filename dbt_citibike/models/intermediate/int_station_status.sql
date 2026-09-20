@@ -1,9 +1,5 @@
 -- Enrichment data realtime station status dari GBFS.
 
-{{ config(
-    materialized='view'
-) }}
-
 SELECT
     *,
 

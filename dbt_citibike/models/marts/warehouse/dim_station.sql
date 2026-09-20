@@ -1,7 +1,5 @@
 -- Dimensi station untuk historical trips dan GBFS realtime.
 
-{{ config(materialized='table') }}
-
 WITH historical AS (
     SELECT
         station_code,

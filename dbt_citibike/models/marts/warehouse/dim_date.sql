@@ -1,7 +1,5 @@
 -- Dimensi tanggal Citi Bike.
 
-{{ config(materialized='table') }}
-
 SELECT DISTINCT
     trip_date AS date_key,
     EXTRACT(DAY FROM trip_date) AS day,

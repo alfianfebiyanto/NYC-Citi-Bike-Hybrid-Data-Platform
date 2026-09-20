@@ -1,10 +1,6 @@
 -- Staging reference station dari GBFS station_information.
 -- Melakukan standardisasi nama field dan tipe data dari RAW layer.
 
-{{ config(
-    materialized='view'
-) }}
-
 SELECT
     -- Identitas station
     CAST(station_id AS STRING) AS station_id,

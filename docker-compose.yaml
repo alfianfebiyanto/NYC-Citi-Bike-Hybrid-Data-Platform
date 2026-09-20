@@ -13,12 +13,10 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.session,airflow.api.auth.backend.basic_auth
     GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/credentials/purwadhika-key.json
-
     DBT_PROJECT_DIR: /opt/airflow/dbt_citibike
     DBT_PROFILES_DIR: /opt/airflow/dbt_citibike
-
     PYTHONPATH: /opt/airflow
-
+    
   env_file:
     - .env
 

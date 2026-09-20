@@ -1,8 +1,6 @@
 -- Citi Bike route performance summary.
 -- Grain: one start station x one end station.
 
-{{ config(materialized='table') }}
-
 SELECT
     f.start_station_key,
     s_start.station_code AS start_station_code,

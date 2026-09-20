@@ -1,5 +1,3 @@
-{{ config(materialized='table') }}
-
 SELECT
     1 AS bike_type_key,
     'classic_bike' AS bike_type

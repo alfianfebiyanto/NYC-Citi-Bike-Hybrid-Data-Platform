@@ -1,8 +1,6 @@
 -- Latest Citi Bike station availability.
 -- Grain: one row per station.
 
-{{ config(materialized='table') }}
-
 SELECT
     f.station_key,
     s.station_code,

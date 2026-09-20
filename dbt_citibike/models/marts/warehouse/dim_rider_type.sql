@@ -1,7 +1,5 @@
 -- Dimensi tipe pengguna Citi Bike.
 
-{{ config(materialized='table') }}
-
 SELECT
     1 AS rider_type_key,
     'member' AS rider_type

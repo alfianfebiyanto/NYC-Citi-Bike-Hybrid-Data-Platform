@@ -1,8 +1,6 @@
 -- Hourly Citi Bike usage summary.
 -- Grain: one hour x rider type x bike type.
 
-{{ config(materialized='table') }}
-
 SELECT
     f.ride_hour,
     r.rider_type,

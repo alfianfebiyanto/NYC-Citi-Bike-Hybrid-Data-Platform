@@ -11,20 +11,19 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
-
 models:
   finpro_alfian_citibike:
     staging:
-      +materialized: incremental
+      +materialized: view
       +schema: staging
       +tags: ["staging"]
 
     intermediate:
-      +materialized: incremental
+      +materialized: view
       +schema: intermediate
       +tags: ["intermediate"]
 
     marts:
-      +materialized: incremental
+      +materialized: table
       +schema: mart
       +tags: ["mart"]

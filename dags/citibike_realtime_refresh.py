@@ -1,6 +1,5 @@
-from datetime import datetime
-
 import pendulum
+from datetime import datetime
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
@@ -28,7 +27,7 @@ with DAG(
     description="Refresh realtime Citi Bike station status dari RAW hingga analytics.",
     default_args=default_args,
     start_date=datetime(2026, 9, 18, tzinfo=WIB),
-    schedule="*/3 * * * *",
+    schedule="*/5 * * * *",
     catchup=False,
     max_active_runs=1,
     tags=["citibike", "realtime", "bigquery", "dbt"],
