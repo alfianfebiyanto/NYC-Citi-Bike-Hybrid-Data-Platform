@@ -21,7 +21,6 @@ models:
         tests:
           - not_null
 
-
   # Hourly historical ride aggregation
   - name: mart_hourly_rides
     description: "Hourly Citi Bike ride metrics by rider type and bike type."
@@ -42,15 +41,21 @@ models:
         tests:
           - not_null
 
-
+      - name: ride_date
+        tests:
+          - not_null
+          
   # Station activity aggregation
   - name: mart_station_performance
     description: "Historical station performance based on departures and arrivals."
     columns:
+      - name: ride_date
+        tests:
+          - not_null
+
       - name: station_key
         tests:
           - not_null
-          - unique
 
       - name: total_departures
         tests:
@@ -59,24 +64,6 @@ models:
       - name: total_arrivals
         tests:
           - not_null
-
-
-  # Origin-destination route aggregation
-  - name: mart_route_performance
-    description: "Historical Citi Bike route performance between origin and destination stations."
-    columns:
-      - name: start_station_key
-        tests:
-          - not_null
-
-      - name: end_station_key
-        tests:
-          - not_null
-
-      - name: total_rides
-        tests:
-          - not_null
-
 
   # Latest realtime station availability
   - name: mart_station_live

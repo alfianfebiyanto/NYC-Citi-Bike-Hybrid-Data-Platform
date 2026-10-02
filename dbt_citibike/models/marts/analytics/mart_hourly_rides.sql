@@ -2,10 +2,10 @@
 -- Grain: one hour x rider type x bike type.
 
 SELECT
+    f.date_key as ride_date,
     f.ride_hour,
     r.rider_type,
     b.bike_type,
-
     COUNT(*) AS total_rides,
     ROUND(AVG(f.ride_duration_minutes), 2) AS avg_ride_duration_minutes,
     ROUND(AVG(f.trip_distance_km), 2) AS avg_trip_distance_km
@@ -19,6 +19,7 @@ INNER JOIN {{ ref('dim_bike_type') }} b
     ON f.bike_type_key = b.bike_type_key
 
 GROUP BY
+    f.date_key,
     f.ride_hour,
     r.rider_type,
     b.bike_type

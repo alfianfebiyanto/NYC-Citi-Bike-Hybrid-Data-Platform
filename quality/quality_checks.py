@@ -13,13 +13,15 @@ from config.settings import (
 
 from config.alerts import send_slack
 
+
 logger = CITIBIKE_LOG("CitibikeQualityCheck")
 client = bigquery.Client(project=PROJECT_ID)
 
-# Helpers
+
 def run_query(query):
     """Jalankan query BigQuery dan ambil satu row hasil."""
     return next(client.query(query).result())
+
 
 def ensure_audit():
     """Pastikan dataset dan table audit tersedia."""
@@ -36,6 +38,7 @@ def ensure_audit():
         client.create_dataset(dataset)
         logger.info(f"Audit dataset created: {dataset_id}")
 
+    # 2. Checking Audit Table
     try:
         client.get_table(table_id)
     except NotFound:
@@ -52,6 +55,7 @@ def ensure_audit():
             bigquery.SchemaField("message", "STRING"),
             bigquery.SchemaField("checked_at", "TIMESTAMP", mode="REQUIRED"),
         ]
+
         client.create_table(bigquery.Table(table_id, schema=schema))
         logger.info(f"Audit table created: {table_id}")
 
@@ -62,7 +66,6 @@ def audit_check(layer, table_name, check_name, actual, expected, passed,
                 run_id=None, dag_id=None):
     """Simpan hasil PASS/FAIL ke audit table."""
 
-    # 1. Tentukan status berdasarkan hasil quality check.
     status = "PASS" if passed else "FAIL"
 
     row = {
@@ -79,7 +82,6 @@ def audit_check(layer, table_name, check_name, actual, expected, passed,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    # 2. Simpan hasil quality check ke audit table.
     errors = client.insert_rows_json(ensure_audit(), [row])
 
     if errors:
@@ -87,6 +89,7 @@ def audit_check(layer, table_name, check_name, actual, expected, passed,
 
     logger.info(f"{status} | {layer} | {table_name} | {check_name} | {actual}")
     return passed
+
 
 def finish_gate(layer, results):
     """Fail pipeline jika ada quality check yang gagal."""
@@ -96,16 +99,17 @@ def finish_gate(layer, results):
 
     logger.info(f"{layer} quality gate PASSED")
 
+# +++ BATCH +++
+
 # Staging Quality
 def check_staging(run_id=None, dag_id=None):
-    """Validasi kualitas teknis data pada STAGING layer."""
+    """Validasi kualitas teknis batch pada STAGING layer."""
 
-    # 1. Tentukan seluruh STAGING table yang akan divalidasi.
+    # 1. Tentukan table yang akan divalidasi
     trips_id = f"{PROJECT_ID}.{STAG_LAYER_BQ}.stg_citibike_trips"
     info_id = f"{PROJECT_ID}.{STAG_LAYER_BQ}.stg_station_information"
-    status_id = f"{PROJECT_ID}.{STAG_LAYER_BQ}.stg_station_status"
 
-    # 2. Validasi row count dan ride_id pada staging trips.
+    # 2. Validasi row count dan ride_id pada staging trips
     trips = run_query(f"""
         SELECT
             COUNT(*) AS total,
@@ -114,7 +118,7 @@ def check_staging(run_id=None, dag_id=None):
         FROM `{trips_id}`
     """)
 
-    # 3. Validasi identitas station pada station information.
+    # 3. Validasi identitas station information
     info = run_query(f"""
         SELECT
             COUNT(*) AS total,
@@ -124,21 +128,7 @@ def check_staging(run_id=None, dag_id=None):
         FROM `{info_id}`
     """)
 
-    # 4. Validasi station dan availability pada station status.
-    status = run_query(f"""
-        SELECT
-            COUNT(*) AS total,
-            COUNTIF(station_id IS NULL) AS null_station,
-            COUNTIF(snapshot_timestamp IS NULL) AS null_snapshot,
-            COUNTIF(
-                num_bikes_available < 0 OR num_ebikes_available < 0
-                OR num_docks_available < 0 OR num_bikes_disabled < 0
-                OR num_docks_disabled < 0
-            ) AS invalid_availability
-        FROM `{status_id}`
-    """)
-
-    # 5. Definisikan seluruh quality check STAGING.
+    # 4. Definisikan quality check STAGING
     checks = [
         ("stg_citibike_trips", "row_count", trips.total, "> 0", trips.total > 0),
         ("stg_citibike_trips", "ride_id_not_null", trips.null_id, 0, trips.null_id == 0),
@@ -148,14 +138,9 @@ def check_staging(run_id=None, dag_id=None):
         ("stg_station_information", "station_id_valid", info.invalid_id, 0, info.invalid_id == 0),
         ("stg_station_information", "station_id_unique", info.duplicate_id, 0, info.duplicate_id == 0),
         ("stg_station_information", "short_name_unique", info.duplicate_short_name, 0, info.duplicate_short_name == 0),
-
-        ("stg_station_status", "row_count", status.total, "> 0", status.total > 0),
-        ("stg_station_status", "station_id_not_null", status.null_station, 0, status.null_station == 0),
-        ("stg_station_status", "snapshot_not_null", status.null_snapshot, 0, status.null_snapshot == 0),
-        ("stg_station_status", "availability_valid", status.invalid_availability, 0, status.invalid_availability == 0),
     ]
 
-    # 6. Simpan seluruh hasil quality check ke audit table.
+    # 5. Simpan hasil quality check
     results = [
         audit_check("STAGING", table, name, actual, expected, passed, run_id, dag_id)
         for table, name, actual, expected, passed in checks
@@ -163,18 +148,17 @@ def check_staging(run_id=None, dag_id=None):
 
     finish_gate("STAGING", results)
 
-# Intermediate Quality
+# Intermediate QualityS
 def check_intermediate(run_id=None, dag_id=None):
-    """Validasi business rules dan reconciliation pada INTERMEDIATE layer."""
+    """Validasi business rules dan reconciliation batch pada INTERMEDIATE layer."""
 
-    # 1. Tentukan table yang dibutuhkan untuk validasi.
+    # 1. Tentukan table yang dibutuhkan
     staging_id = f"{PROJECT_ID}.{STAG_LAYER_BQ}.stg_citibike_trips"
     clean_id = f"{PROJECT_ID}.{INTER_LAYER_BQ}.int_citibike_trips_clean"
     invalid_id = f"{PROJECT_ID}.{INTER_LAYER_BQ}.int_citibike_trips_invalid"
     info_id = f"{PROJECT_ID}.{INTER_LAYER_BQ}.int_station_information_clean"
-    status_id = f"{PROJECT_ID}.{INTER_LAYER_BQ}.int_station_status"
 
-    # 2. Validasi clean trips dan reconciliation dengan staging.
+    # 2. Validasi clean trips dan reconciliation dengan staging
     trips = run_query(f"""
         SELECT
             (SELECT COUNT(*) FROM `{staging_id}`) AS staging_count,
@@ -185,15 +169,15 @@ def check_intermediate(run_id=None, dag_id=None):
             (
                 SELECT COUNT(*) FROM `{clean_id}`
                 WHERE ended_at <= started_at
-                   OR member_casual NOT IN ('member', 'casual')
-                   OR rideable_type NOT IN ('classic_bike', 'electric_bike')
-                   OR start_station_id IS NULL OR end_station_id IS NULL
-                   OR start_lat NOT BETWEEN -90 AND 90 OR end_lat NOT BETWEEN -90 AND 90
-                   OR start_lng NOT BETWEEN -180 AND 180 OR end_lng NOT BETWEEN -180 AND 180
+                    OR member_casual NOT IN ('member', 'casual')
+                    OR rideable_type NOT IN ('classic_bike', 'electric_bike')
+                    OR start_station_id IS NULL OR end_station_id IS NULL
+                    OR start_lat NOT BETWEEN -90 AND 90 OR end_lat NOT BETWEEN -90 AND 90
+                    OR start_lng NOT BETWEEN -180 AND 180 OR end_lng NOT BETWEEN -180 AND 180
             ) AS invalid_rules
     """)
 
-    # 3. Validasi identitas dan business rules station information.
+    # 3. Validasi station information
     info = run_query(f"""
         SELECT
             COUNT(*) AS total,
@@ -208,20 +192,9 @@ def check_intermediate(run_id=None, dag_id=None):
         FROM `{info_id}`
     """)
 
-    # 4. Validasi identitas dan availability station status.
-    status = run_query(f"""
-        SELECT
-            COUNT(*) AS total,
-            COUNTIF(station_id IS NULL OR snapshot_timestamp IS NULL) AS invalid_id,
-            COUNTIF(
-                num_bikes_available < 0 OR num_ebikes_available < 0
-                OR num_docks_available < 0 OR available_capacity < 0
-            ) AS invalid_rules
-        FROM `{status_id}`
-    """)
-
-    # 5. Definisikan seluruh quality check INTERMEDIATE.
+    # 4. Definisikan quality check INTERMEDIATE
     reconciled = trips.staging_count == trips.clean_count + trips.invalid_count
+
     checks = [
         ("int_citibike_trips_clean", "ride_id_not_null", trips.null_id, 0, trips.null_id == 0),
         ("int_citibike_trips_clean", "ride_id_unique", trips.duplicate_id, 0, trips.duplicate_id == 0),
@@ -237,13 +210,9 @@ def check_intermediate(run_id=None, dag_id=None):
         ("int_station_information_clean", "station_id_unique", info.duplicate_id, 0, info.duplicate_id == 0),
         ("int_station_information_clean", "short_name_unique", info.duplicate_short_name, 0, info.duplicate_short_name == 0),
         ("int_station_information_clean", "business_rules", info.invalid_rules, 0, info.invalid_rules == 0),
-
-        ("int_station_status", "row_count", status.total, "> 0", status.total > 0),
-        ("int_station_status", "identity_valid", status.invalid_id, 0, status.invalid_id == 0),
-        ("int_station_status", "business_rules", status.invalid_rules, 0, status.invalid_rules == 0),
     ]
 
-    # 7. Simpan seluruh hasil quality check ke audit table.
+    # 5. Simpan hasil quality check
     results = [
         audit_check("INTERMEDIATE", table, name, actual, expected, passed, run_id, dag_id)
         for table, name, actual, expected, passed in checks
@@ -253,92 +222,93 @@ def check_intermediate(run_id=None, dag_id=None):
 
 # Warehouse Quality
 def check_dimension(table_name, key_column, run_id=None, dag_id=None):
-    """Validasi primary key pada dimension table."""
+    """Validasi primary key dimension table."""
 
     table_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.{table_name}"
 
-    # 1. Periksa null dan duplicate pada primary key dimension.
+    # 1. Periksa null dan duplicate primary key
     row = run_query(f"""
         SELECT
+            COUNT(*) AS total,
             COUNTIF({key_column} IS NULL) AS null_key,
             COUNT(*) - COUNT(DISTINCT {key_column}) AS duplicate_key
         FROM `{table_id}`
     """)
 
-    # 2. Simpan hasil validasi primary key ke audit table.
+    # 2. Simpan hasil quality check
     return [
-        audit_check("WAREHOUSE", table_name, f"{key_column}_not_null", row.null_key, 0, row.null_key == 0, run_id, dag_id),
-        audit_check("WAREHOUSE", table_name, f"{key_column}_unique", row.duplicate_key, 0, row.duplicate_key == 0, run_id, dag_id),
+        audit_check("WAREHOUSE", table_name, "row_count",
+                    row.total, "> 0", row.total > 0, run_id, dag_id),
+
+        audit_check("WAREHOUSE", table_name, f"{key_column}_not_null",
+                    row.null_key, 0, row.null_key == 0, run_id, dag_id),
+
+        audit_check("WAREHOUSE", table_name, f"{key_column}_unique",
+                    row.duplicate_key, 0, row.duplicate_key == 0, run_id, dag_id),
     ]
 
 
 def check_mart(run_id=None, dag_id=None):
-    """Validasi fact, dimension, dan reconciliation pada warehouse."""
+    """Validasi fact, dimension, dan reconciliation batch pada warehouse."""
 
-    # 1. Tentukan fact dan source table yang akan divalidasi.
+    # 1. Tentukan fact dan source table
     fact_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.fact_trips"
     clean_id = f"{PROJECT_ID}.{INTER_LAYER_BQ}.int_citibike_trips_clean"
-    status_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.fact_station_status"
 
-    # 2. Validasi grain, foreign key, dan reconciliation fact trips.
+    # 2. Validasi grain, foreign key dan reconciliation fact trips
     trips = run_query(f"""
         SELECT
             (SELECT COUNT(*) FROM `{clean_id}`) AS clean_count,
             (SELECT COUNT(*) FROM `{fact_id}`) AS fact_count,
             (SELECT COUNTIF(ride_id IS NULL) FROM `{fact_id}`) AS null_id,
             (SELECT COUNT(*) - COUNT(DISTINCT ride_id) FROM `{fact_id}`) AS duplicate_id,
+
             (
                 SELECT COUNT(*) FROM `{fact_id}`
-                WHERE date_key IS NULL OR start_station_key IS NULL
-                   OR end_station_key IS NULL OR rider_type_key IS NULL
-                   OR bike_type_key IS NULL
+                WHERE date_key IS NULL
+                    OR start_station_key IS NULL
+                    OR end_station_key IS NULL
+                    OR rider_type_key IS NULL
+                    OR bike_type_key IS NULL
             ) AS null_fk,
+
             (
                 SELECT COUNT(*) FROM `{fact_id}` f
-                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_date` d ON f.date_key = d.date_key
-                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_station` ss ON f.start_station_key = ss.station_key
-                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_station` es ON f.end_station_key = es.station_key
-                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_rider_type` r ON f.rider_type_key = r.rider_type_key
-                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_bike_type` b ON f.bike_type_key = b.bike_type_key
-                WHERE d.date_key IS NULL OR ss.station_key IS NULL OR es.station_key IS NULL
-                   OR r.rider_type_key IS NULL OR b.bike_type_key IS NULL
+                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_date` d
+                    ON f.date_key = d.date_key
+                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_station` ss
+                    ON f.start_station_key = ss.station_key
+                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_station` es
+                    ON f.end_station_key = es.station_key
+                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_rider_type` r
+                    ON f.rider_type_key = r.rider_type_key
+                LEFT JOIN `{PROJECT_ID}.{MART_LAYER_BQ}.dim_bike_type` b
+                    ON f.bike_type_key = b.bike_type_key
+                WHERE d.date_key IS NULL
+                    OR ss.station_key IS NULL
+                    OR es.station_key IS NULL
+                    OR r.rider_type_key IS NULL
+                    OR b.bike_type_key IS NULL
             ) AS invalid_fk
     """)
 
-    # 3. Validasi grain dan availability fact station status.
-    station = run_query(f"""
-        SELECT
-            COUNT(*) AS total,
-            COUNTIF(station_key IS NULL OR snapshot_timestamp IS NULL) AS invalid_key,
-            COUNT(*) - COUNT(DISTINCT CONCAT(station_key, '|', CAST(snapshot_timestamp AS STRING))) AS duplicate_event,
-            COUNTIF(
-                num_bikes_available < 0 OR num_ebikes_available < 0
-                OR num_docks_available < 0
-            ) AS invalid_availability
-        FROM `{status_id}`
-    """)
-
-    # 4. Definisikan quality check untuk fact table.    
+    # 3. Definisikan quality check fact
     checks = [
+        ("fact_trips", "row_count", trips.fact_count, "> 0", trips.fact_count > 0),
         ("fact_trips", "ride_id_not_null", trips.null_id, 0, trips.null_id == 0),
         ("fact_trips", "ride_id_unique", trips.duplicate_id, 0, trips.duplicate_id == 0),
         ("fact_trips", "foreign_keys_not_null", trips.null_fk, 0, trips.null_fk == 0),
         ("fact_trips", "foreign_keys_valid", trips.invalid_fk, 0, trips.invalid_fk == 0),
         ("fact_trips", "clean_fact_reconciliation", trips.fact_count, trips.clean_count, trips.fact_count == trips.clean_count),
-
-        ("fact_station_status", "row_count", station.total, "> 0", station.total > 0),
-        ("fact_station_status", "key_valid", station.invalid_key, 0, station.invalid_key == 0),
-        ("fact_station_status", "station_snapshot_unique", station.duplicate_event, 0, station.duplicate_event == 0),
-        ("fact_station_status", "availability_valid", station.invalid_availability, 0, station.invalid_availability == 0),
     ]
 
-    # 5. Simpan hasil quality check fact ke audit table.
+    # 4. Simpan hasil quality check fact
     results = [
         audit_check("WAREHOUSE", table, name, actual, expected, passed, run_id, dag_id)
         for table, name, actual, expected, passed in checks
     ]
 
-    # 6. Validasi primary key seluruh dimension table.
+    # 5. Validasi dimension
     results += check_dimension("dim_date", "date_key", run_id, dag_id)
     results += check_dimension("dim_station", "station_key", run_id, dag_id)
     results += check_dimension("dim_rider_type", "rider_type_key", run_id, dag_id)
@@ -346,43 +316,35 @@ def check_mart(run_id=None, dag_id=None):
 
     finish_gate("WAREHOUSE", results)
 
-
 # Analytics Quality
 def check_analytics(run_id=None, dag_id=None):
-    """Validasi reconciliation analytics mart sebelum digunakan dashboard."""
+    """Validasi reconciliation analytics batch sebelum digunakan dashboard."""
 
-    # 1. Tentukan fact dan analytics mart yang akan divalidasi.
+    # 1. Tentukan fact dan analytics mart
     fact_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.fact_trips"
     daily_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.mart_daily_rides"
     hourly_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.mart_hourly_rides"
     station_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.mart_station_performance"
-    route_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.mart_route_performance"
-    live_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.mart_station_live"
 
-    # 2. Bandingkan hasil agregasi analytics dengan fact table.
+    # 2. Bandingkan analytics dengan fact
     row = run_query(f"""
         SELECT
             (SELECT COUNT(*) FROM `{fact_id}`) AS fact_count,
             (SELECT SUM(total_rides) FROM `{daily_id}`) AS daily_count,
             (SELECT SUM(total_rides) FROM `{hourly_id}`) AS hourly_count,
             (SELECT SUM(total_departures) FROM `{station_id}`) AS departures,
-            (SELECT SUM(total_arrivals) FROM `{station_id}`) AS arrivals,
-            (SELECT SUM(total_rides) FROM `{route_id}`) AS route_count,
-            (SELECT COUNT(*) FROM `{live_id}`) AS live_count,
-            (SELECT COUNT(DISTINCT station_key) FROM `{live_id}`) AS live_unique
+            (SELECT SUM(total_arrivals) FROM `{station_id}`) AS arrivals
     """)
 
-    # 3. Definisikan seluruh reconciliation analytics mart.
+    # 3. Definisikan reconciliation analytics
     checks = [
         ("mart_daily_rides", "fact_reconciliation", row.daily_count, row.fact_count, row.daily_count == row.fact_count),
         ("mart_hourly_rides", "fact_reconciliation", row.hourly_count, row.fact_count, row.hourly_count == row.fact_count),
         ("mart_station_performance", "departure_reconciliation", row.departures, row.fact_count, row.departures == row.fact_count),
         ("mart_station_performance", "arrival_reconciliation", row.arrivals, row.fact_count, row.arrivals == row.fact_count),
-        ("mart_route_performance", "fact_reconciliation", row.route_count, row.fact_count, row.route_count == row.fact_count),
-        ("mart_station_live", "station_unique", row.live_count, row.live_unique, row.live_count == row.live_unique),
     ]
 
-    # 4. Simpan seluruh hasil reconciliation ke audit table.
+    # 4. Simpan hasil quality check
     results = [
         audit_check("ANALYTICS", table, name, actual, expected, passed, run_id, dag_id)
         for table, name, actual, expected, passed in checks
@@ -390,18 +352,18 @@ def check_analytics(run_id=None, dag_id=None):
 
     finish_gate("ANALYTICS", results)
 
-# Realtime Monitoring
+# +++ STREAMING +++
 
 FRESHNESS = 5
 THRESHOLD_DLQ = 100
 
-
+# Raw Streaming Quality
 def check_gbfs_streaming():
-    """Validasi kualitas dan freshness data GBFS streaming."""
+    """Validasi kualitas dan freshness RAW GBFS streaming."""
 
     table_id = f"{PROJECT_ID}.{RAW_LAYER_BQ}.station_status"
 
-    # 1. Periksa data RAW GBFS dan freshness snapshot terbaru.
+    # 1. Periksa data RAW GBFS
     row = run_query(f"""
         SELECT
             COUNT(*) AS total,
@@ -429,18 +391,160 @@ def check_gbfs_streaming():
     if row.invalid_availability > 0:
         raise ValueError("GBFS availability tidak valid")
 
-    if row.freshness > FRESHNESS:
+    if row.freshness is None or row.freshness > FRESHNESS:
         raise ValueError(f"GBFS data stale | freshness={row.freshness}m")
 
     logger.info(f"GBFS PASS | rows={row.total} | freshness={row.freshness}m")
 
+# Streaming Staging Quality
+def check_streaming_staging(run_id=None, dag_id=None):
+    """Validasi station status pada STAGING streaming."""
 
+    # 1. Tentukan table
+    status_id = f"{PROJECT_ID}.{STAG_LAYER_BQ}.stg_station_status"
+
+    # 2. Validasi station status
+    status = run_query(f"""
+        SELECT
+            COUNT(*) AS total,
+            COUNTIF(station_id IS NULL OR snapshot_timestamp IS NULL) AS invalid_id,
+            COUNTIF(
+                num_bikes_available < 0
+                OR num_ebikes_available < 0
+                OR num_docks_available < 0
+            ) AS invalid_rules
+        FROM `{status_id}`
+    """)
+
+    # 3. Definisikan quality check
+    checks = [
+        ("stg_station_status", "row_count", status.total, "> 0", status.total > 0),
+        ("stg_station_status", "identity_valid", status.invalid_id, 0, status.invalid_id == 0),
+        ("stg_station_status", "availability_valid", status.invalid_rules, 0, status.invalid_rules == 0),
+    ]
+
+    # 4. Simpan hasil quality check
+    results = [
+        audit_check("STREAMING_STAGING", table, name, actual, expected, passed, run_id, dag_id)
+        for table, name, actual, expected, passed in checks
+    ]
+
+    finish_gate("STREAMING_STAGING", results)
+
+# Streaming Intermediate Quality
+def check_streaming_intermediate(run_id=None, dag_id=None):
+    """Validasi station status pada INTERMEDIATE streaming."""
+
+    # 1. Tentukan table
+    status_id = f"{PROJECT_ID}.{INTER_LAYER_BQ}.int_station_status"
+
+    # 2. Validasi station status
+    status = run_query(f"""
+        SELECT
+            COUNT(*) AS total,
+            COUNTIF(station_id IS NULL OR snapshot_timestamp IS NULL) AS invalid_id,
+            COUNTIF(
+                num_bikes_available < 0
+                OR num_ebikes_available < 0
+                OR num_docks_available < 0
+                OR available_capacity < 0
+            ) AS invalid_rules
+        FROM `{status_id}`
+    """)
+
+    # 3. Definisikan quality check
+    checks = [
+        ("int_station_status", "row_count", status.total, "> 0", status.total > 0),
+        ("int_station_status", "identity_valid", status.invalid_id, 0, status.invalid_id == 0),
+        ("int_station_status", "business_rules", status.invalid_rules, 0, status.invalid_rules == 0),
+    ]
+
+    # 4. Simpan hasil quality check
+    results = [
+        audit_check("STREAMING_INTERMEDIATE", table, name, actual, expected, passed, run_id, dag_id)
+        for table, name, actual, expected, passed in checks
+    ]
+
+    finish_gate("STREAMING_INTERMEDIATE", results)
+
+# Streaming Warehouse Quality
+def check_streaming_warehouse(run_id=None, dag_id=None):
+    """Validasi grain dan availability fact_station_status."""
+
+    # 1. Tentukan table
+    status_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.fact_station_status"
+
+    # 2. Validasi grain dan availability
+    station = run_query(f"""
+        SELECT
+            COUNT(*) AS total,
+            COUNTIF(station_key IS NULL OR snapshot_timestamp IS NULL) AS invalid_key,
+            COUNT(*) - COUNT(
+                DISTINCT CONCAT(
+                    CAST(station_key AS STRING),
+                    '|',
+                    CAST(snapshot_timestamp AS STRING)
+                )
+            ) AS duplicate_event,
+            COUNTIF(
+                num_bikes_available < 0
+                OR num_ebikes_available < 0
+                OR num_docks_available < 0
+            ) AS invalid_availability
+        FROM `{status_id}`
+    """)
+
+    # 3. Definisikan quality check
+    checks = [
+        ("fact_station_status", "row_count", station.total, "> 0", station.total > 0),
+        ("fact_station_status", "key_valid", station.invalid_key, 0, station.invalid_key == 0),
+        ("fact_station_status", "station_snapshot_unique", station.duplicate_event, 0, station.duplicate_event == 0),
+        ("fact_station_status", "availability_valid", station.invalid_availability, 0, station.invalid_availability == 0),
+    ]
+
+    # 4. Simpan hasil quality check
+    results = [
+        audit_check("STREAMING_WAREHOUSE", table, name, actual, expected, passed, run_id, dag_id)
+        for table, name, actual, expected, passed in checks
+    ]
+
+    finish_gate("STREAMING_WAREHOUSE", results)
+
+# Streaming Analytics Quality
+def check_streaming_analytics(run_id=None, dag_id=None):
+    """Validasi grain mart_station_live."""
+
+    # 1. Tentukan table
+    live_id = f"{PROJECT_ID}.{MART_LAYER_BQ}.mart_station_live"
+
+    # 2. Pastikan satu station hanya satu row
+    row = run_query(f"""
+        SELECT
+            COUNT(*) AS live_count,
+            COUNT(DISTINCT station_key) AS live_unique
+        FROM `{live_id}`
+    """)
+
+    # 3. Definisikan quality check
+    checks = [
+        ("mart_station_live", "station_unique", row.live_count, row.live_unique, row.live_count == row.live_unique),
+    ]
+
+    # 4. Simpan hasil quality check
+    results = [
+        audit_check("STREAMING_ANALYTICS", table, name, actual, expected, passed, run_id, dag_id)
+        for table, name, actual, expected, passed in checks
+    ]
+
+    finish_gate("STREAMING_ANALYTICS", results)
+
+# Streaming DLQ Monitoring
 def check_gbfs_dlq():
     """Monitor volume data GBFS yang masuk ke DLQ."""
 
     table_id = f"{PROJECT_ID}.{RAW_LAYER_BQ}.station_status_dlq"
 
-    # 1. Hitung jumlah data DLQ dalam 5 menit terakhir.
+    # 1. Hitung jumlah DLQ 5 menit terakhir
     row = run_query(f"""
         SELECT COUNT(*) AS total
         FROM `{table_id}`
@@ -450,7 +554,7 @@ def check_gbfs_dlq():
         )
     """)
 
-    # 2. Kirim warning jika jumlah DLQ melewati threshold.
+    # 2. Kirim warning jika DLQ melewati threshold
     if row.total > THRESHOLD_DLQ:
         logger.warning(f"GBFS DLQ WARNING | rows={row.total}")
 
@@ -463,6 +567,6 @@ def check_gbfs_dlq():
             "*ACTION REQUIRED: Segera lakukan pengecekan lebih lanjut pada data DLQ.*"
         )
 
-    # 3. Catat status PASS jika volume DLQ masih dalam threshold.
+    # 3. Catat PASS jika masih dalam threshold
     else:
         logger.info(f"GBFS DLQ PASS | rows={row.total}")

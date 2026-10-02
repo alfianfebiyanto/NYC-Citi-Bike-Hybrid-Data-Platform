@@ -181,7 +181,6 @@ with DAG(
                 "mart_daily_rides "
                 "mart_hourly_rides "
                 "mart_station_performance "
-                "mart_route_performance"
             ),
         )
 

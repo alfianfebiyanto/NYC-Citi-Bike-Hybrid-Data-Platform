@@ -9,6 +9,5 @@ finpro_alfian_citibike:
       dataset: "{{ env_var('FINPRO_DBT_DATASET') }}"
       location: "{{ env_var('LOCATION_ID') }}"
       keyfile: "{{ env_var('GOOGLE_APPLICATION_CREDENTIALS') }}"
-      # export GOOGLE_APPLICATION_CREDENTIALS="/mnt/d/finpro-citibike-alfian/credentials/purwadhika-key.json"
       threads: 4
       timeout_seconds: 300
