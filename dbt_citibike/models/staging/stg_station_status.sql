@@ -1,7 +1,6 @@
 -- Staging data realtime GBFS station_status.
 -- Melakukan standardisasi field dan tipe data dari RAW layer.
 
-
 SELECT
     -- Identitas station
     CAST(station_id AS STRING) AS station_id,

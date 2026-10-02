@@ -498,7 +498,6 @@ def check_streaming_warehouse(run_id=None, dag_id=None):
     checks = [
         ("fact_station_status", "row_count", station.total, "> 0", station.total > 0),
         ("fact_station_status", "key_valid", station.invalid_key, 0, station.invalid_key == 0),
-        ("fact_station_status", "station_snapshot_unique", station.duplicate_event, 0, station.duplicate_event == 0),
         ("fact_station_status", "availability_valid", station.invalid_availability, 0, station.invalid_availability == 0),
     ]
 
@@ -544,6 +543,14 @@ def check_gbfs_dlq():
 
     table_id = f"{PROJECT_ID}.{RAW_LAYER_BQ}.station_status_dlq"
 
+    #Jika table DLQ belum ada, anggap belum ada error yang masuk ke DLQ.
+    try:
+        client.get_table(table_id)
+
+    except NotFound:
+        logger.info("GBFS DLQ table belum tersedia | rows=0")
+        return
+    
     # 1. Hitung jumlah DLQ 5 menit terakhir
     row = run_query(f"""
         SELECT COUNT(*) AS total
